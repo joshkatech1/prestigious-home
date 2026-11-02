@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Global 16 LED Dashboard</title>
+    <!-- Include CDN for MQTT Library -->
+    <script src="https://cloudflare.com"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f9; padding: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; max-width: 500px; margin: 20px auto; }
+        @media (max-width: 480px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+        button { padding: 15px; font-size: 16px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; color: white; transition: 0.2s; }
+        .btn-led { background-color: #555; }
+        .btn-led.active { background-color: #4CAF50; }
+        .master-controls { margin-top: 30px; display: flex; justify-content: center; gap: 20px; }
+        .btn-master-on { background-color: #008CBA; }
+        .btn-master-off { background-color: #f44336; }
+        #status { font-weight: bold; color: #ff9800; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+    <h2>ESP32-S3 Global Controller</h2>
+    <div id="status">Connecting to Cloud Broker...</div>
+
+    <!-- 16 LED Buttons Grid -->
+    <div class="grid" id="led-grid"></div>
+
+    <!-- Master Controls -->
+    <div class="master-controls">
+        <button class="btn-master-on" onclick="sendMaster('ALL_ON')">Turn ALL ON</button>
+        <button class="btn-master-off" onclick="sendMaster('ALL_OFF')">Turn ALL OFF</button>
+    </div>
+
+    <script>
+        // Use MQTT over Websockets port for browsers
+        const brokerUrl = 'wss://://hivemq.com';
+        const topic = 'myhome/esp32s3/leds';
+        const client = mqtt.connect(brokerUrl);
+        
+        const statusDiv = document.getElementById('status');
+        const grid = document.getElementById('led-grid');
+        let ledStates = Array(16).fill(false);
+
+        client.on('connect', () => {
+            statusDiv.textContent = "Connected Globally via Cloud Broker";
+            statusDiv.style.color = "green";
+        });
+
+        client.on('error', () => {
+            statusDiv.textContent = "Connection Error";
+            statusDiv.style.color = "red";
+        });
+
+        // Dynamically build the 16 toggles
+        for (let i = 0; i < 16; i++) {
+            const btn = document.createElement('button');
+            btn.className = 'btn-led';
+            btn.id = `led-${i}`;
+            btn.textContent = `LED ${i + 1}: OFF`;
+            btn.onclick = () => toggleLed(i);
+            grid.appendChild(btn);
+        }
+
+        function toggleLed(index) {
+            ledStates[index] = !ledStates[index];
+            const stateText = ledStates[index] ? 'ON' : 'OFF';
+            const btn = document.getElementById(`led-${index}`);
+            
+            if (ledStates[index]) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+            btn.textContent = `LED ${index + 1}: ${stateText}`;
+            
+            // Publish individual payload e.g., "LED_4_ON"
+            client.publish(topic, `LED_${index}_${stateText}`);
+        }
+
+        function sendMaster(command) {
+            client.publish(topic, command);
+            
+            // Sync local UI button states locally 
+            for (let i = 0; i < 16; i++) {
+                const btn = document.getElementById(`led-${i}`);
+                if (command === 'ALL_ON') {
+                    ledStates[i] = true;
+                    btn.classList.add('active');
+                    btn.textContent = `LED ${i + 1}: ON`;
+                } else {
+                    ledStates[i] = false;
+                    btn.classList.remove('active');
+                    btn.textContent = `LED ${i + 1}: OFF`;
+                }
+            }
+        }
+    </script>
+</body>
+</html>
